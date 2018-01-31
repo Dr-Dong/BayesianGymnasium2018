@@ -1,0 +1,269 @@
+---
+title: "Lecture 3: A beginning to Bernoulli modeling"
+output: pdf_document
+fontsize: 12pt 
+geometry: margin=0.75in
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(extrafont)
+loadfonts()
+setwd("~/Dropbox/BayesClass/2018 Class/Lecture 1")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  comment = NA,
+  fig.align = "center",
+  fig.height = 2.5,
+  fig.width = 4
+  )
+```
+
+Today we will begin to build our first model. As a motivating example, we will borrow from the example in section 2.2 of McElreath (2016)'s \emph{Statistical Rethinking} book using globe tosses. This is because I sincerely hate coin flip examples.
+
+We have an inflatable globe representing our planet Earth. The globe is itself a model of the actual planet that we live on. 
+
+Let's say that we are interested in the proportion of the surface covered in water. As a sampling exercise, we will have $N$ people toss the globe into the air. Upon catching it, pick a finger and record whether or not that finger is touching water ($y=1$) or land ($y=0$).
+
+```{r, echo=FALSE}
+N <- 10 # sample size
+obs <- c("L", "L", "L", "W", "W", "W", "W", "W", "W", "W")
+```
+
+For example, suppose we have `r N` people toss the globe and we get
+\begin{center}
+`r paste(obs, collapse=" ")`
+\end{center}
+
+where W is water and L is land.
+```{r}
+N <- 10 # number of globe tosses
+obs <- c("L", "L", "L", "W", "W", "W", "W", "W", "W", "W")
+y <- ifelse(obs == "W", 1, 0) # convert to 1's & 0's
+```
+
+\section{The Bernoulli likelihood function}
+We now have a data story that we need to translate into a formal probability model by restating our data story as a sampling process.
+
+  1. The true proportion of water covering the globe is $p$.
+  
+  2. A single toss has a probability $p$ of producing a water (W) observation and a probability $(1 - p)$ of producing a land observation. 
+  
+  3. Each toss is independent of the others. 
+  
+Based on these descriptions of the sampling process, we can describe the probability of each outcome using the Bernoulli distribution:
+\begin{equation}
+\label{eq1}
+  P(y|p) = p^y (1 - p)^{(1 - y)} .
+\end{equation}
+
+Here each datum $y$ is fixed by and observation and $p$ is a continuous variable. 
+
+Equation \ref{eq1} specifies the probability of fixed $y$'s as a function of candidiate values of $p$, and different values of $p$ yield different probabilities of $y$. 
+
+  * Equation \ref{eq1} is the *likelihood function* of $p$. 
+  
+As mentioned earlier, we assume that each  globe toss $y_i$ is independent. For a set of outcomes $Y$, the probability of the set is the multiplicative product of the individual outcome probabilities. 
+
+If we denote the number of W's as $x = \sum_i y_i$ and the number of L's as $N-x = \sum_i(1-y_i)$, then 
+
+$$ \begin{aligned}
+  P(Y|p) &= \prod_i P(y_i|p) \nonumber \\
+              &= p^x(1 - p)^{N-x}.
+\end{aligned}$$
+Now that we have our likelihood function, we can calculate the likelihoods of our fixed data for a range of $p$ values from 0--1.
+
+```{r}
+peez <- seq(0,1, length=10000) # sequence of candidate p's
+
+# vector of likelihood for the fixed data for each candidate p
+liks <- numeric(length = length(peez))
+
+for(i in 1:length(peez)) {
+  temp <- dbinom(y, 1, peez[i])
+  liks[i] <- prod(temp)
+}
+```
+We can then plot out the probabilities of the data as a function of each of those candidate parameter values.
+
+```{r, fig.height=3, fig.width=5}
+par(mar=c(3.5,5,0.1,0.5)) # set margins
+plot(peez, liks, type="l", lwd=3, col="blue", las=1, ylim=c(0,0.0025), 
+  frame.plot=FALSE, xlab="", ylab="")
+mtext(text = "Likelihood", side=2, line = 4)
+mtext(text = "p's", side=1, line = 2, font=3)
+```
+
+The maximum likelihood estimate can be approximated using R:
+```{r}
+(maxLik <- peez[liks == max(liks)])
+```
+```{r echo = FALSE}
+maxLik <- sum(y)/length(y)
+```
+
+or it  can be calculated empirically as we discussed last time $x/N =$ `r maxLik`. 
+
+In almost all cases, it is easier and more computationally efficient to work with likelihoods on the log scale. 
+
+  * Log-likelihoods are added rather than multiplied.
+  
+  * Prevents numerical underflow (floating-point processor errors that occur when values get REALLY close to zero).
+  
+Under the hood, the Hamiltonian Monte Carlo (HMC) sampler that Stan uses works on log-probability gradients. 
+
+We can easily calculate the likelihood of our data given a range of $p$'s on a log scale:
+```{r, fig.height=3, fig.width=5}
+logLiks <- numeric(length(peez)) # vector of log-likelihoods
+
+for(i in 1:length(peez)) {
+  temp <- dbinom(y, 1, peez[i], log=TRUE)
+  logLiks[i] <- sum(temp)
+}
+
+par(mar=c(3.5,3.4,0.1,0.5)) # set margins
+plot(peez, logLiks, type="l", lwd=3, col="blue", las=1, ylim=c(-30, -5), 
+  frame.plot=FALSE, xlab="", ylab="")
+mtext(text = "log-Likelihood", side=2, line = 2.5)
+mtext(text = "p's", side=1, line = 2, font=3)
+```
+
+Notice that this surface is much flatter. This makes it much easier to explore parameter space in comparison to the raw likelihoods.
+
+\section*{Priors}
+One of the fundamental differences between Bayesian and frequentist statistics is that parameters (e.g., $p$) are themselves random variables.
+
+  * i.e., variables whose values are unknown until observed or sampled and are drawn from some underlying probability distribution. 
+  
+Thus, a key requirement of Bayesian statistics is to define the *prior* distribution that describes the parameters. 
+
+But how do we translate prior information about the real world into a mathematical probability distribution? How do we pick a prior?
+
+Historically, *conjugate priors* were selected that played nicely with likelihood functions, so that $P(y|p)$ and $P(p)$ combine such that the posterior distribution $P(p|y)$ had the same functional form as the prior $P(p)$.
+
+For a Bernoulli or binomial distribution, the conjugate prior for $p$ is a *beta distribution*.
+
+$$
+p \sim \mathrm{Beta}{(\alpha, \beta)} = \frac{p^{\alpha - 1}(1 - p)^{\beta - 1}}{\mathrm{B}(\alpha, \beta)}
+$$
+
+where 
+
+$$
+\mathrm{B}(\alpha, \beta) = \frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)} = \frac{\alpha(N-1!) \beta(N-1)!}{(N - 1)!(\alpha + \beta)}.
+$$
+
+\subsection*{Parameterizing a beta distribution}
+The beta distribution has two parameters, $\alpha$ and $\beta$.
+
+I conceptualize the beta distribution using a balloon metaphor:
+
+  * Imagine a balloon in a box. If you put pressure on the left side, the density inside the balloon shifts to the right. 
+  
+  * This is exactly what happens when the parameter $\alpha$ is increased. The probability density shifts to higher values. 
+    
+    * The same thing happens when $\beta$ is increased except that the probability density shifts to the left. 
+    
+  * The higher  the value of $\alpha$ or $\beta$, the harder you are pushing down on the balloon. If both values are high, a lot of the balloon's shape will be concentrated as a tall peak in the middle. 
+  
+We can also think about $\alpha$ and $\beta$ in terms of previously observed data, in which there were $\alpha$ Waters and $\beta$ lands in a total of $\alpha+\beta = N$ globe tosses. 
+
+If we had no information about the planet other than the knowledge that the Earth has both land and water, that is equal to observing one Water and one Land and $p \sim \mathrm{Beta}(1,1)$.
+  
+  * This is a *uniform distribution* where all $p$'s are equally probable. This is called a *flat prior*.
+
+Alternatively, say the data we originally collected (`r paste(obs, collapse=" ")`) was being used to inform our prior. Then $p \sim \mathrm{Beta}(7,3)$.
+```{r, fig.height=3, fig.width=5}
+par(mfrow = c(1,2))
+par(mar =  c(4,4,0.1,0.5))
+curve(dbeta(x, shape1 = 1, shape2 = 1), las=1, ylab = "p(p|a,b)", xlab="p",
+  col="blue", lwd=3)
+
+curve(dbeta(x, shape1 = 7, shape2 = 3), las=1, ylab="", xlab="p", 
+  col="blue", lwd=3)
+```
+
+Another way to parameterize a beta distribution is in terms of central tendency and our confidence in that central tendency. For example, we might think that the earth is 70\% covered in water, but are a bit uncertain about that estimate. 
+
+  * e.g., having only observed $N=10$ globes previously.
+  
+We can think about the beta distribution in terms of its mean ($\mu$), mode ($\omega$), and concentration ($\kappa$).
+
+  * When $\alpha = \beta$, the mean and mode are 0.5. 
+  * When $\alpha > \beta$, the mean and mode are $>$ 0.5. 
+  * When $\alpha < \beta$, the mean and mode are $<$ 0.5.
+  
+The spread of the beta distribution is related to the concentration $\kappa = \alpha + \beta$. 
+
+  * As $\kappa$ gets larger, the distribution becomes more concentrated. 
+  
+To parameterize a beta distribution in terms of the mean, 
+$$
+\alpha = \mu\kappa \ \ \mathrm{and} \ \ \beta = (1-\mu)\kappa.
+$$
+
+To parameterize a beta distribution in terms of the mode, 
+$$
+\alpha = \omega (\kappa -2) +1 \ \mathrm{and} \ \beta = (1 - \omega)(\kappa - 2) +1
+$$
+for $\kappa > 2$.
+
+We can think about $\kappa$ as the amount of information or data needed to change our prior beliefs about $\mu$ or $\omega$. If we are not very confident in the proportion of water (say 70\%) covering the earth, we might only need a few globe flips (e.g., 5) and thus a small $\kappa$. For example,
+```{r, fig.width=6, fig.height=3}
+par(mfrow=c(1,2))
+par(mar=c(4,4,0.1,0.5))
+
+mu <- 0.7 # expected mean proportion of water 
+omega <- 0.7 # proportion of water as the mode
+kappa <- 5 # low confidence in central measures
+
+# plot in terms of mean:
+a <- mu * kappa
+b <- (1 - mu) * kappa
+
+curve(dbeta(x, shape1=a, shape2=b),las=1, ylab="p(P|a, b)", xlab="p", 
+      col="blue", lwd=2) 
+abline(v = mu, col="red", lwd=2, lty=3)
+text(0.76, 1.5, expression(mu), cex=2)
+
+# Plotting in terms of mode:
+a <- omega * (kappa - 2) + 1
+b <- (1 - omega) * (kappa - 2) + 1
+
+curve(dbeta(x, shape1=a, shape2=b),las=1, ylab="", xlab="p", 
+      col="blue", lwd=2) 
+abline(v=omega, col="red", lwd=2, lty=3)
+text(0.7, 1.5, expression(omega), cex=2)
+```
+
+Conversely, if we are very confident in the proportion of water covering Earth, we might need $\kappa = 50$ or more globe flips.
+
+```{r, fig.width=6, fig.height=3}
+par(mfrow=c(1,2))
+par(mar=c(4,4,0.1,0.5))
+
+mu <- 0.7 # expected mean proportion of water 
+omega <- 0.7 # proportion of water as the mode
+kappa <- 50 # low confidence in central measures
+
+# plot in terms of mean:
+a <- mu * kappa
+b <- (1 - mu) * kappa
+
+curve(dbeta(x, shape1=a, shape2=b),las=1, ylab="P(p|a, b)", xlab="p", 
+      col="blue", lwd=2) 
+abline(v = mu, col="red", lwd=2, lty=3)
+text(0.6, 5.5, expression(mu), cex=2)
+# Plotting in terms of mode:
+a <- omega * (kappa - 2) + 1
+b <- (1 - omega) * (kappa - 2) + 1
+
+curve(dbeta(x, shape1=a, shape2=b),las=1, ylab="", xlab="p", 
+  col="blue", lwd=2) 
+abline(v=omega, col="red", lwd=2, lty=3)
+text(0.6, 5.5, expression(omega), cex=2)
+```
+
+For skewed distributions, the mode $\omega$ can be more intuitive. The mode is where the curve reaches it's greatest height, whereas the mean is somewhere away from the mode along the longer tail. 
+
+  * This is apparent from the dotted line in each of the plots, especially for the first set of plots with low $\kappa$. 
