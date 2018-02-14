@@ -5,32 +5,6 @@ rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 source("../utilityFunctions.R")
 
-###########posterior predictive simulation
-set.seed(2)
-nObs <- 20
-N <- round(runif(nObs, 4,10),digits=0)
-obs <- rbinom(nObs, size = N, prob=0.73)
-omega <- 0.5
-kappa <- 4
-dat1 <-  list(nObs=nObs, N=N, obs = obs, omega=omega, kappa=kappa)
-
-modGQ <- stan(file="07.binomialGQ.stan", #path to .stan file
-              data=dat1,
-              iter=2000, # number of MCMC iterations
-              chains=4,  # number of independent MCMC chains
-              seed=3, 
-              verbose = FALSE) # get rid of stupid messages and warnings 
-
-yNew <- as.matrix(modGQ, "yNew")
-
-obsMat <- t(replicate(obs,n = nrow(yNew), simplify=TRUE))
-mean(apply(obsMat > yNew, 2, mean))
-
-yAvg <- apply(yNew,2, median)
-plot(yAvg, obs, las=1, pch=16)
-abline(a=0,b=1)
-
-
 ################### set up data for first hierarchical model
 
 # Low certainty in omega, high kappa
