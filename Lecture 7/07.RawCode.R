@@ -62,13 +62,13 @@ mtext(text = expression(paste(theta)), side=1, line = 2)
 
 ##################### High certainty in omega, low kappa
 
-a_omega <- 20
-b_omega <- 20
+alpha_omega <- 20
+beta_omega <- 20
 kappa <- 5
 
 N <- 6
 obs <- 5
-datEx2 <- list(a_omega=a_omega, b_omega=b_omega, kappa=kappa,
+datEx2 <- list(alpha_omega=alpha_omega, beta_omega=beta_omega, kappa=kappa,
                N=N, obs=obs)
 
 #### no likelihood
