@@ -150,6 +150,8 @@ for (n in 1:nrow(propTN)) {
 medianTN <- apply(propTN,2,median)  
 curve(dbeta(x,medianTN[1], medianTN[2]), add=TRUE, col="cornflowerblue", lwd=3)
 
+lines(density(omega), type="l", lwd=3, col="red")
+
 ##################################
 
 ##################################
