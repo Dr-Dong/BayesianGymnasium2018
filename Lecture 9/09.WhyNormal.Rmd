@@ -1,0 +1,317 @@
+---
+title: 'Lecture 9: Modeling continuous data or why we like the normal distribution'
+author: "Zachary Marion"
+date: "2/26/2018"
+output: pdf_document
+fontsize: 12pt 
+geometry: margin=0.75in
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(extrafont)
+loadfonts()
+setwd("~/Dropbox/BayesClass/2018 Class/Lecture 9")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  comment = NA,
+  fig.align = "center",
+  fig.height = 3,
+  fig.width = 4
+  )
+```
+
+```{r stanPackages, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+library(rstan)
+library(shinystan)
+library(car)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+source("../utilityFunctions.R")
+```
+
+
+\emph{* This lecture is based on chapter 4 of Statistical Rethinking by Richard McElreath.}
+
+Thus far we have played with simple models and discrete, binomially distributed data. Now we will switch to modeling continuous data using the normal distribution and dive into linear regression.
+
+\section{Why go Gaussian?}
+
+Imagine 100 of us go and hang out on the 50 yd line in the Stadium on campus. We all begin flipping coins, and each time it comes up heads we take a step forward; each time we get a tails, we take a step back. Each of us do this for 20 flips and then stop. 
+
+Can we predict the proportion of us hanging out at the end on the 50 yd line? what about the south 40 yd line?
+
+We can simulate this without having to sneak on the field. For each person, we generate a list of steps and then add them up. Because everyone has different gaits, we will use a uniform distribution to generate step sizes.
+```{r}
+pos <- replicate(20, runif(100,-1, 1)) # simulate positions 
+cumPos <- t(apply(pos,1,cumsum)) # calculate cumulative position at each step
+cumPos <- cbind(rep(0,100), cumPos) # add initial step
+```
+
+If we plot this out we see that even though we are simulating random walks from a uniform distribution, the familiar Gaussian shape emerges very quickly from the randomness. 
+
+```{r, fig.height=2.5, fig.width=7}
+par(mar=c(3,3,0.1,0.5))
+plot(1:100, cumPos[,21], xlim=c(0,20), type="n", las=1, axes=FALSE, xaxs="i")
+
+axis(1, at=seq(0,20, by=5))
+axis(2, at=seq(-10,10, by=5), las=1)
+mtext(text = "Step", side=1, line = 2)
+mtext(text = "position", side=2, line = 2.1)
+
+for(i in 1:nrow(cumPos)) {
+  lines(0:20, cumPos[i,], col="#50505050")
+}
+```
+
+```{r, fig.height=2.5, fig.width=3}
+par(mar=c(3,3,0.1,0.5))
+plot(density(cumPos[,16],adj=1.5, from=-10, to=10), main="", las=1, xlab="",ylab="")
+axis(1, at=seq(-10,10, length=5), las=1)
+mtext(text = "position at step 16", side=1, line = 2)
+```
+Any process that adds together random values from the same distribution (e.g., uniform) converges to a normal given a large enough sample.
+
+  * Each sample can be thought of as a deviation from an average value.
+
+  * When those deviations are added together, those fluctuations cancel each other out. Large positive fluctuations cancel large negative ones. The more terms in the sum, the more chances for each deviation to be canceled by another, or by a series of smaller deviations in the opposite direction.
+  
+  * Eventually the most likely way to realize the sums will be one in which every fluctuation is canceled and sum to 0, relative to the mean.
+  
+The same thing happens when small effects are multiplied. For example, suppose the growth rate of an organism is affected by 10 loci, each with small interacting (i.e., multipicative affects). We can sample an individual by:
+
+```{r, eval=FALSE}
+prod(1 + runif(10, 0,0.1))
+```  
+
+where each of 12 loci has an effect from 1 (no multiplicative effect) to 1.1 (10% increase). If we sample 1,000 indidviduals,
+```{r}
+par(mar=c(3,3,0.1,0.5))
+growth <- replicate(1000, prod(1+runif(12,0,0.1)))
+plot(density(growth), main="",las=1)
+```
+
+we approximate a bell curve.
+
+This is because the effect at each locus is small. Multiplying small numbers is approximately the same as addition. The smaller the effect, the better the additive approximation will be. 
+
+Large deviates that are multiplied together do not produce Gaussian distributions on their original scale. But they do produce Gaussian distributions on the log scale.
+```{r}
+par(mar=c(3,3,0.1,0.5))
+logBig <- replicate(1000, log(prod(1+runif(12,0,0.5))))
+plot(density(logBig), main="",las=1)
+```
+This is because adding logs is equivalent to multiplying the original numbers. And since measurement scales are arbitrary, there is nothing wrong with doing this  transformation. 
+
+Given the phenomena described above, there are 2 good reasons for using a normal distribution for likelihoods and/or priors:
+
+  1. The normal distribution describes widespread patterns such as measurement errors, growth variation, etc. 
+    
+    * Because the fluctuations of many different processes add together to resemble a normal distribution, we cannot easily identify the underlying process without additional information
+     
+      * this doesn't make the normal less useful for modeling.
+  
+  2. The normal is generally the distribution with maximum entropy (to be elaborated on later). 
+  
+    * Most natural expression of our ignorance. If all we can do is say there is finite variance, the Gaussian is the shape that realizes this ignorance in the largest number of ways without any additional assumptions.
+
+\section{Modeling the dependent variable with a Gaussian distribution}
+
+\subsection{Data story}
+\emph{Dictyota menstrualis} is a brown seaweed that produces > 250 dichyol terpenes as chemical deterrents against marine herbivores and biofouling microbes. 
+
+  * When herbivore pressure is high, having higher terpene concentrations should lead to higher lifetime biomass. At least that's my story! 
+
+I have saved this data as a `.csv` file called `algae.csv`. Also, below is a function, `seaweedSim` with the code to simulate your own data if you want to play around with it.
+```{r, eval=FALSE}
+# You give it the total number of desired observations, the intercept, 
+# the slope, and the standard deviation and it makes a dataframe for you. 
+# Play with it, changing parameters as you wish to see how the model
+# differs. Also, in the script, terpenes is the x variable. I didn't
+# include arguments to change that, but it would be easy by changing
+# the mean=50 & sd=3 to whatever you want.
+
+seaweedSim <- function(nObs, alpha, beta, sigma) {
+  terpenes <- round(rnorm(nObs, mean=50, sd=3), digits=2) 
+  error <- rnorm(nObs, mean=0, sd=sigma)
+  biomass <- alpha + beta * terpenes + error
+  out <- data.frame(terpenes, biomass)
+  out <- out[order(terpenes),]
+  return(out)
+}
+
+set.seed(20)
+algae <- seaweedSim(nObs=50, alpha=0, beta=3, sigma=12)
+#write.csv(algae, file = "algae.csv", row.names = FALSE)
+```
+
+```{r}
+algae <- read.csv("algae.csv")
+head(algae)
+summary(algae)
+```
+We will begin with a single measurement variable, `biomass`, to model as a normal distribution. There are two parameters describing the distribution's shape:
+
+  1. $\mu$: the mean describing the central location
+  2. $\sigma$: the standard deviation describing the spread
+
+Bayes and MCMC will allow us to explore a number of the most plausible distributions, each with their own $\mu$ and $\sigma$ and rank them by their posterior plausability. 
+
+To define our model for biomass as normally distributed with mean $\mu$ and standard deviation $\sigma$, we need to define a prior $\mathrm{Pr}(\mu, \sigma)$---the \emph{joint prior probability} for the parameters. 
+
+For many purposes, priors are specified independently for each parameter (as we have done previously). Thus we assume $\mathrm{Pr}(\mu, \sigma) = \mathrm{Pr}(\mu)\ \mathrm{Pr}(\sigma)$.
+
+The basic model is as follows:
+\begin{align}
+  BM_i    &\sim \mathrm{Normal}(\mu, \sigma)  \nonumber  \\ 
+  \mu     &\sim \mathrm{Normal}(150, 30)                 \\
+  \sigma  &\sim \mathrm{Cauchy^+}(0, 10)      \nonumber
+\end{align}
+
+I have set the priors as follows:
+
+The prior for $\mu$ is weakly informative and centered on the mean of `biomass` with 95% probability the average is between $150 \pm 60$. 
+   
+  * Later we will play with more restrictive \emph{regularizing priors}
+  
+The prior for $\sigma$ must be positive. A uniform distibution distribution for this usually doesn't sample well from $\mathrm{U}(0, \infty)$, and setting upper bounds on uniforms can cause issues with the MCMC sampler getting stuck against boundaries.  
+   
+Instead we will use a \emph{half-Cauchy} distribution. This is equivalent to a folded t-distribution with $df=1$. 
+    
+  * It centers most of the probability mass around zero and therefore credible values, but has fat tails for extremes. You can play with the Cauchy with the `dcauchy` function. 
+
+```{r, fig.height=2.75, fig.width=4, echo=-1}
+par(mar=c(3,3,0.1,0.5))
+# normal(0,5) curve
+curve(dnorm(x, 0, 5), from=0, to=20, las=1)
+# half-Cauchy(0,5) curve
+curve(dcauchy(x, 0, 5), add=TRUE, col="blue")
+# normal(0,10) curve
+curve(dnorm(x, 0, 10), add=TRUE, col="red")
+# half-Cauchy(0,10) curve
+curve(dcauchy(x, 0, 10), add=TRUE, col="cornflowerblue")
+
+mtext(text = expression(bold(sigma)), side=1, line = 2)
+text(13.5, 0.075, "Normal (0,5)", font=1,cex=1, col="black", adj=c(0, 0.5))
+text(13.5, 0.0675, "Cauchy (0,5)", font=1,cex=1, col="blue", adj=c(0, 0.5))
+text(13.5, 0.06, "Normal (0,10)", font=1,cex=1, col="red", adj=c(0, 0.5))
+text(13.5, 0.0525, "Cauchy (0,10)", font=1,cex=1, col="cornflowerblue", 
+  adj=c(0, 0.5))
+```    
+    
+We set up our model (`09.modMean.stan`) similarly to how we set up the simple binomial models previously, except that our data are now part of a vector. 
+
+```{r, eval=FALSE}
+data {
+  int<lower=0> nObs;          // No. obs.
+  vector<lower=0>[nObs] BM;   // biomass observations
+  real<lower=0> muMean;       // mean of prior mu
+  real<lower=0> muSD;         // SD of prior mu
+  real<lower=0> sigmaSD;      // scale for sigma
+}  
+
+parameters {
+  real mu;
+  real<lower=0> sigma;
+}
+
+model {
+  mu ~ normal(muMean, muSD);
+  sigma ~ cauchy(0, sigmaSD);
+  
+  BM ~ normal(mu, sigma);
+}
+
+```
+```{r engine = 'cat', engine.opts = list(file = "09.modMean.stan", lang = "stan"), echo=FALSE}
+data {
+  int<lower=0> nObs;          // No. obs.
+  vector<lower=0>[nObs] BM;   // biomass observations
+  real<lower=0> muMean;       // mean of prior mu
+  real<lower=0> muSD;         // SD of prior mu
+  real<lower=0> sigmaSD;      // scale for sigma
+}  
+
+parameters {
+  real mu;
+  real<lower=0> sigma;
+}
+
+model {
+  mu ~ normal(muMean, muSD);
+  sigma ~ cauchy(0, sigmaSD);
+  
+  BM ~ normal(mu, sigma);
+}
+
+```
+
+Lets set up the data and look at the simplest model first:    
+
+```{r, message=FALSE, warning=FALSE, cache=TRUE, verbose=FALSE}
+
+dat <- list(nObs=dim(algae)[1], BM=algae$biomass, muMean=150, 
+            muSD=30, sigmaSD=10)
+
+intMod <- stan(file="09.modMean.stan", data=dat, iter=2000, chains=4, seed=3)
+
+parMod <- as.data.frame(intMod, pars=c("mu", "sigma"))
+``` 
+
+```{r}
+print(intMod, pars=c("mu", "sigma"), digits.summary=2)
+```
+
+We can plot the marginal densities and 95% HDI's of $\mu$ &  $\sigma$: 
+
+
+```{r, fig.height=3, fig.width=7, echo=c(-1,-2)}
+par(mar=c(3,3,0.15,0.5))
+par(mfrow=c(1,2))
+
+plotInterval(parMod$mu, HDI=TRUE, credMass=0.95, xlims=c(140, 160),
+              col="blue", yOffset=0.01)
+mtext(expression(paste(bold(mu))), side=1, line=2, cex=1.2)
+
+plotInterval(parMod$sigma, HDI=TRUE, credMass=0.95, xlims=c(10, 25), 
+             col="blue", yOffset=0.01)
+mtext(expression(paste(bold(sigma))), side=1, line=2, cex=1.2)
+``` 
+  
+Or plot the joint posterior density $\mathrm{Pr}(\mu, \sigma)$:
+
+```{r, fig.height=2.8, fig.width=4, echo=-1}
+par(mar=c(3,3,0.1,0.5))
+col <- "#50505010"
+plot(parMod, pch=16, col=col, las=1, ylim=c(10,25), 
+      xlim=c(140,160), bty="l")
+dataEllipse(as.matrix(parMod),level=c(0.25,0.5,0.95), add=TRUE, labels=FALSE,
+            plot.points=FALSE, center.pch=FALSE, col=c(col,"#006DCC"))
+mtext(text = expression(paste(sigma)), side=2, line=2.2, cex=1.2, las=1)
+mtext(text = expression(paste(mu)), side=1, line=2, cex=1.2)
+```  
+
+As before, if we want to estimate the biomass for the \emph{Dictyota} population, we need to consider both the posterior mean and standard deviations.
+
+```{r, fig.height=3, fig.width=4, echo=-1}
+par(mar=c(3,3.2,0.1,0.5))
+# plot empty plot
+plot(0:1,0:1, type="n", xlim=c(100, 200), ylim=c(0,0.035), las=1, bty="l") 
+mtext(text = "Estimated biomass", side=1, line = 2, cex=1)
+
+# Overlay posterior biomass densities
+for (n in 1:nrow(parMod)) {
+  curve(dnorm(x, parMod[n,1], parMod[n,2]), add=TRUE, col="#50505010")
+}
+
+# Overlay median posterior probability density
+medBM <- apply(parMod,2,median)
+curve(dnorm(x,medBM[1], medBM[2]), add=TRUE, col="cornflowerblue", lwd=3)
+```
+
+For this intercept only model, $\mu$ and $\sigma$ are relatively uncorrelated. 
+```{r, digits=2}
+cor(parMod)
+```
+
+This can change though once we add a predictor. 
