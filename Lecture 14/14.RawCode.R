@@ -1,3 +1,5 @@
+
+# Run this to install rethinking package
 install.packages(c('devtools','coda','mvtnorm','loo'))
 library(devtools)
 install_github("rmcelreath/rethinking")
@@ -5,6 +7,8 @@ install_github("rmcelreath/rethinking")
 
 ######################
 # Make up some data
+
+library(rethinking)
 
 x <- c(37, 35.5, 34.5, 41.5, 55.5, 61, 53.5)
 y <- c(438, 452, 612, 521, 752, 871, 1350)
@@ -133,7 +137,7 @@ text(0.45, 1.5, "Q = P")
 
 ######################
 #
-N <- 20
+N <- 100
 kseq <- 1:5
 nSims <- 500
 
