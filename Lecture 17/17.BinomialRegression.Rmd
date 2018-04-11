@@ -225,7 +225,7 @@ The priors we specified are weakly regularizing. Therefore we should use model s
 
 Model selection shows that `m4`, the model with the interaction term, is the best model, but not by much.
 
-The multiple regression model without the interaction term is close behind with 36% of the weight.
+The multiple regression model without the interaction term is close behind with almost 30% of the weight.
 
 Therefore, we probably should not discount `m3`. Instead, let's use model averaging to combine the two and then look at the results.
 
@@ -339,7 +339,7 @@ After visually observing the results of the model and calculating the slopes of 
   * However, much of that interaction is accounted for by the nonadditive nature of the model and the difference in intercepts.
     * The addition of an explicit interaction term has much less of an effect here.
 
-  * This is why the simpler model without the interaction term got over $\frac{1}{3}$ of the model weight, and why the WAIC values were so similar.
+  * This is why the simpler model without the interaction term got almost $\frac{1}{3}$ of the model weight, and why the WAIC values were so similar.
 
 
 
