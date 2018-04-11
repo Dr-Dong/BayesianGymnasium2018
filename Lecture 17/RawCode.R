@@ -6,7 +6,7 @@ library(rethinking)
 library(MASS)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-
+source("../utilityFunctions.R")
 setwd("~/Dropbox/BayesClass/2018 Class/Lecture 17")
 #########################
 #read in data
