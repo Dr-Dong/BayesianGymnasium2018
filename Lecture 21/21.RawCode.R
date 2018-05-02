@@ -183,7 +183,7 @@ xseq <-seq(0.9, 0.1, length=7)
 
 # empty plot for when A=C=0
 plot(0:1,0:1, type="n", xlim=c(0,1), ylim=c(0,1), xaxp=c(0,1,1), las=1)
-mtext("interaction", side=1, line=2)
+mtext("intention", side=1, line=2)
 
 A <- 0  # value for action
 C <- 0  # value for contact
@@ -205,7 +205,7 @@ text(x=xseq, y=c(0.03, 0.12, 0.2, 0.35, 0.53, 0.7, 0.9),
 
 # empty plot for A=1, C=0
 plot(0:1,0:1, type="n", xlim=c(0,1), ylim=c(0,1), xaxp=c(0,1,1), las=1)
-mtext("interaction", side=1, line=2)
+mtext("intention", side=1, line=2)
 
 A <- 1  # value for action
 C <- 0  # value for contact
@@ -227,7 +227,7 @@ text(x=xseq, y=c(0.1, 0.26, 0.36, 0.53, 0.69, 0.8, 0.93),
 
 # empty plot for A=0, C=1
 plot(0:1,0:1, type="n", xlim=c(0,1), ylim=c(0,1), xaxp=c(0,1,1), las=1)
-mtext("interaction", side=1, line=2)
+mtext("intention", side=1, line=2)
 
 A <- 0  # value for action
 C <- 1  # value for contact

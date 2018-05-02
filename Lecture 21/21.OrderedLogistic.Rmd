@@ -351,7 +351,7 @@ xseq <-seq(0.9, 0.1, length=7)
 
 # empty plot for when A=C=0
 plot(0:1,0:1, type="n", xlim=c(0,1), ylim=c(0,1), xaxp=c(0,1,1), las=1)
-mtext("interaction", side=1, line=2)
+mtext("intention", side=1, line=2)
 
 A <- 0  # value for action
 C <- 0  # value for contact
@@ -373,7 +373,7 @@ text(x=xseq, y=c(0.03, 0.12, 0.2, 0.35, 0.53, 0.7, 0.9),
 
 # empty plot for A=1, C=0
 plot(0:1,0:1, type="n", xlim=c(0,1), ylim=c(0,1), xaxp=c(0,1,1), las=1)
-mtext("interaction", side=1, line=2)
+mtext("intention", side=1, line=2)
 
 A <- 1  # value for action
 C <- 0  # value for contact
@@ -395,7 +395,7 @@ text(x=xseq, y=c(0.1, 0.26, 0.36, 0.53, 0.69, 0.8, 0.93),
 
 # empty plot for A=0, C=1
 plot(0:1,0:1, type="n", xlim=c(0,1), ylim=c(0,1), xaxp=c(0,1,1), las=1)
-mtext("interaction", side=1, line=2)
+mtext("intention", side=1, line=2)
 
 A <- 0  # value for action
 C <- 1  # value for contact
@@ -416,11 +416,11 @@ text(x=xseq, y=c(0.13, 0.35, 0.45, 0.56, 0.69, 0.8, 0.93),
 
 ```
 
-What I have done is looped through the last 100 iterations of the posterior and plotted the cutoff points. Each plot is holding `action` and `contact` constant while plotting the change in interaction. 
+What I have done is looped through the last 100 iterations of the posterior and plotted the cutoff points. Each plot is holding `action` and `contact` constant while plotting the change in `intention`. 
 
 We can interpret our results by looking at the white space in between the blue lines. The larger the white space, the greater that value of $k$. 
 
-For example, in the last plot, including `interact` in the story problem shifts the probability mass downward such that the "forbidden" (1) category has the highest probability. 
+For example, in the last plot, including `intention` in the story problem shifts the probability mass downward such that the "forbidden" (1) category has the highest probability. 
 
 
 
